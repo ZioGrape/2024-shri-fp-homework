@@ -14,38 +14,70 @@
  * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
  * Ответ будет приходить в поле {result}
  */
- import Api from '../tools/api';
+import Api from '../tools/api';
+import * as R from 'ramda';
 
- const api = new Api();
+const api = new Api();
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+const urlNumbers = 'https://api.tech/numbers/base';
+const urlAnimals = 'https://animals.tech/';
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
+const validateString = (value, handleError) => {
+  const isNumeric = R.test(/^[0-9]+(\.[0-9]+)?$/);
+  const isPositive = R.compose(R.lt(0), parseFloat);
+  const lengthInRange = R.allPass([
+    R.compose(R.gt(R.__, 2), R.length),
+    R.compose(R.lt(R.__, 10), R.length),
+  ]);
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+  if (!isNumeric(value) || !isPositive(value) || !lengthInRange(value)) {
+    handleError('ValidationError');
+    return false;
+  }
+  return true;
+};
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+const roundNumber = R.compose(Math.round, parseFloat);
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+const convertToBinary = (number) =>
+  api.get(urlNumbers)({ from: 10, to: 2, number });
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+const logResult = (writeLog) => R.tap(writeLog);
+
+const square = (number) => Math.pow(number, 2);
+
+const remainderOfThree = (number) => number % 3;
+
+const getAnimalById = (id) => api.get(`${urlAnimals}${id}`)();
+
+const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
+  writeLog(value);
+
+  if (!validateString(value, handleError)) return;
+
+  const processPipeline = R.pipe(
+    roundNumber,
+    logResult(writeLog),
+    convertToBinary,
+    R.andThen(({ result: binaryResult }) => {
+      writeLog(binaryResult);
+
+      const binaryLength = binaryResult.length;
+      writeLog(binaryLength);
+
+      const squared = square(binaryLength);
+      writeLog(squared);
+
+      const remainder = remainderOfThree(squared);
+      writeLog(remainder);
+
+      return getAnimalById(remainder);
+    }),
+    R.andThen(({ result: animal }) => handleSuccess(animal)),
+    R.otherwise(handleError)
+  );
+
+  processPipeline(value);
+};
 
 export default processSequence;
